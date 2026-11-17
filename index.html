@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>XM-Serve Fleet Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
+<style>
+/* Layout: a rack-sheet. Inputs on the left like a config panel, live results on the right; stepper on top maps to the 3 screens. */
+:root{
+  --bg:#F3F5F7; --panel:#FFFFFF; --ink:#13202B; --muted:#5A6875; --line:#D9E0E6;
+  --base:#8C99A6; --xmem:#3B4BD8; --xmem-soft:#E6E9FC;
+  --good:#1D7A4E; --good-soft:#E3F3EA; --warn:#9A5B00; --warn-soft:#FBF0DC;
+  --case:#3B4BD8; --you:#13202B; --ass:#9A5B00;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E151C; --panel:#151F28; --ink:#E6ECF1; --muted:#93A1AE; --line:#26333F;
+  --base:#6C7A88; --xmem:#8C98FF; --xmem-soft:#1F2650;
+  --good:#5CC995; --good-soft:#12301F; --warn:#E3A84A; --warn-soft:#33260F;
+  --case:#8C98FF; --you:#E6ECF1; --ass:#E3A84A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E151C; --panel:#151F28; --ink:#E6ECF1; --muted:#93A1AE; --line:#26333F;
+  --base:#6C7A88; --xmem:#8C98FF; --xmem-soft:#1F2650;
+  --good:#5CC995; --good-soft:#12301F; --warn:#E3A84A; --warn-soft:#33260F;
+  --case:#8C98FF; --you:#E6ECF1; --ass:#E3A84A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.concept{font-size:12.5px;color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:8px 12px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-size:30px;line-height:1.1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 span{color:var(--xmem)}
+.sub{color:var(--muted);margin:4px 0 0;max-width:62ch}
+h2{font-family:var(--f-display);font-size:20px;margin:0;text-wrap:balance}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0;font-weight:600}
+p{margin:0}
+.steps{display:flex;gap:6px;flex-wrap:wrap}
+.steps button{font:inherit;font-size:13.5px;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:999px;padding:7px 14px;cursor:pointer;display:flex;gap:8px;align-items:center}
+.steps button b{font-family:var(--f-mono);font-weight:500}
+.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--xmem);outline-offset:2px}
+
+.strip{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:center}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.strip .k{font-size:12px;color:var(--muted)}
+.strip .v{font-family:var(--f-mono);font-size:15px;font-variant-numeric:tabular-nums}
+.strip .v .arrow{color:var(--muted);margin:0 4px}
+.strip .v .after{color:var(--xmem);font-weight:600}
+.strip .go{margin-left:auto}
+.btn{font:inherit;font-weight:600;border:0;border-radius:8px;padding:9px 16px;cursor:pointer;background:var(--xmem);color:#fff}
+:root[data-theme="dark"] .btn{color:#0E151C}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn{color:#0E151C}}
+.btn.ghost,:root .btn.ghost{background:transparent;color:var(--ink)!important;border:1px solid var(--line)}
+
+section.view{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+section.view[hidden]{display:none}
+@media (max-width:820px){section.view{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.span2{grid-column:1/-1}
+
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:6px;padding:6px 10px;cursor:pointer}
+.chip[aria-pressed="true"]{border-color:var(--xmem);background:var(--xmem-soft);color:var(--xmem)}
+.field{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center}
+.field label{font-weight:500;font-size:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.field .hint{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+.field input,.field select{font:inherit;font-family:var(--f-mono);font-size:14px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-left-width:3px;border-radius:6px;padding:6px 8px;width:150px;text-align:right}
+.field select{text-align:left;font-family:var(--f-body)}
+.field[data-src="you"] input,.field[data-src="you"] select{border-left-color:var(--you)}
+.field[data-src="ass"] input,.field[data-src="ass"] select{border-left-color:var(--ass)}
+.field[data-src="case"] input,.field[data-src="case"] select{border-left-color:var(--case)}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--muted);padding:6px 10px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+details{border-top:1px solid var(--line);padding-top:12px}
+details summary{cursor:pointer;font-weight:600;font-size:14px}
+details .fields{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.tag{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;border-radius:4px;padding:1px 6px;white-space:nowrap;border:1px solid}
+.tag.you{color:var(--you);border-color:var(--you)}
+.tag.case{color:var(--case);border-color:var(--case);background:var(--xmem-soft)}
+.tag.pub{color:var(--good);border-color:var(--good)}
+.tag.ass{color:var(--ass);border-color:var(--ass);border-style:dashed}
+.tag.calc{color:var(--muted);border-color:var(--line)}
+.legend-src{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12.5px;color:var(--muted);align-items:center}
+
+.hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.metric{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.metric.feature{background:var(--xmem-soft);border-color:var(--xmem)}
+.metric.dim{opacity:.72}
+.metric .lbl{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.metric .big{font-family:var(--f-mono);font-size:27px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.metric.feature .big{color:var(--xmem)}
+.metric .note{font-size:12.5px;color:var(--muted)}
+.metric .math{font-family:var(--f-mono);font-size:12px;color:var(--ink);background:var(--bg);border-radius:6px;padding:6px 8px;overflow-wrap:anywhere}
+.pill{font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px;background:var(--xmem);color:var(--panel)}
+.bars{display:flex;flex-direction:column;gap:14px}
+.bar-row{display:grid;grid-template-columns:110px minmax(0,1fr) 92px;gap:10px;align-items:center;font-size:13px}
+.track{height:18px;background:var(--bg);border-radius:4px;overflow:hidden}
+.fill{height:100%;border-radius:4px;transition:width .25s ease}
+.fill.b{background:var(--base)} .fill.x{background:var(--xmem)}
+.bar-row .num{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.fill{transition:none}}
+.band{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:480px){.band{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.band button{font:inherit;text-align:left;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:4px}
+.band button[aria-pressed="true"]{border-color:var(--xmem);background:var(--xmem-soft)}
+.band .s{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.band .g{font-family:var(--f-mono);font-size:18px;font-weight:600}
+.slider{display:flex;flex-direction:column;gap:4px}
+.slider .row{display:flex;justify-content:space-between;gap:8px;font-size:14px;flex-wrap:wrap}
+.slider .row b{font-family:var(--f-mono);font-weight:600}
+input[type=range]{width:100%;accent-color:var(--xmem)}
+.locked{border:1px dashed var(--line);border-radius:10px;padding:14px;color:var(--muted);font-size:13.5px}
+.callout{border-radius:8px;padding:10px 12px;font-size:13.5px}
+.callout.warn{background:var(--warn-soft);color:var(--ink)}
+.callout.good{background:var(--good-soft);color:var(--ink)}
+.callout.info{background:var(--xmem-soft);color:var(--ink)}
+.callout b{font-weight:600}
+.mem{display:flex;flex-direction:column;gap:8px}
+.mem .stack{display:flex;height:26px;border-radius:5px;overflow:hidden;border:1px solid var(--line)}
+.mem .stack div{height:100%}
+.mem .legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--muted)}
+.mem .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.defs{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.defs div{border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.defs b{font-size:13.5px}
+.defs .use{font-size:12px;color:var(--muted)}
+
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+td code{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap}
+td.n,th.n{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.cur td{background:var(--xmem-soft)}
+
+.vm{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.vm > div{border:1px solid var(--line);border-radius:8px;padding:10px}
+.vm .lbl{font-size:12px;color:var(--muted)}
+.vm .val{font-family:var(--f-mono);font-size:17px;font-weight:600}
+form{display:flex;flex-direction:column;gap:10px}
+form label{font-size:13.5px;font-weight:500;display:flex;flex-direction:column;gap:4px}
+form label.check{flex-direction:row;gap:8px;align-items:flex-start;font-weight:400}
+form label.check input{margin-top:3px}
+form input:not([type=checkbox]),form textarea{font:inherit;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+form textarea{min-height:64px;resize:vertical}
+ul.clean,ol.clean{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14px}
+pre.summary{font-family:var(--f-mono);font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;white-space:pre-wrap;margin:0;max-height:240px;overflow:auto}
+.row-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.muted{color:var(--muted);font-size:13px}
+.demo{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--warn);border:1px dashed var(--warn);border-radius:4px;padding:1px 6px;align-self:flex-start}
+.insight{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.insight div{border-top:2px solid var(--xmem);padding-top:8px;display:flex;flex-direction:column;gap:4px;font-size:13.5px}
+.insight b{font-size:14px}
+.insight .to{font-size:12.5px;color:var(--muted)}
+footer{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>What would <span>X-Mem</span> do to your fleet?</h1>
+      <p class="sub">For neoclouds and inference platforms that sell tokens. Enter your fleet, see cost per 1M tokens and tokens served per GPU before and after, and the most X-Mem is worth to you.</p>
+    </div>
+    <nav class="steps" aria-label="Steps">
+      <button data-go="setup"><b>1</b> Your fleet</button>
+      <button data-go="results"><b>2</b> Your results</button>
+      <button data-go="pilot"><b>3</b> Proposed pilot</button>
+    </nav>
+  </header>
+
+  <div class="strip" aria-live="polite">
+    <div><div class="k">Cost per 1M tokens</div><div class="v" id="s-cost"></div></div>
+    <div><div class="k">Tokens/sec per GPU</div><div class="v" id="s-cap"></div></div>
+    <div><div class="k" id="s-zk">Break-even X-Mem price</div><div class="v"><span class="after" id="s-z"></span></div></div>
+    <button class="btn go" id="s-next">See results</button>
+  </div>
+
+  <!-- SCREEN 1 -->
+  <section class="view" id="v-setup">
+    <div class="card">
+      <h2>Your fleet</h2>
+      <div class="legend-src"><span class="tag you">You</span>your input <span class="tag ass">Assumption</span>our default, change it <span class="tag case">Case benchmark</span>Netpreme published <span class="tag pub">Public spec</span>vendor data</div>
+      <div>
+        <h3 style="margin-bottom:8px">Start from a profile</h3>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div class="field" data-src="you"><label for="i-gpu">GPU type <span class="tag pub">Public spec</span></label>
+        <select id="i-gpu"><option value="H100">NVIDIA H100 (80 GB)</option><option value="H200">NVIDIA H200 (141 GB)</option><option value="B200">NVIDIA B200 (192 GB)</option><option value="XPU">Case example XPU (0.3 TB)</option></select>
+        <span class="hint">Sets HBM per GPU from the vendor spec, plus default throughput and price below.</span></div>
+      <div class="field" data-src="you"><label for="i-n">Number of GPUs <span class="tag you">You</span></label><input id="i-n" type="number" min="1" step="8" inputmode="numeric"></div>
+      <div class="field" data-src="you"><label for="i-work">Main workload <span class="tag you">You</span></label>
+        <select id="i-work"><option value="agent">Coding agents</option><option value="chat">Long-context chat</option><option value="multi">Many models kept warm</option></select>
+        <span class="hint" id="h-work"></span></div>
+      <div class="field" id="f-c"><label for="i-c">Your cost per GPU-hour ($) <span id="t-c"></span></label><input id="i-c" type="number" min="0" step="0.05" inputmode="decimal">
+        <span class="hint">All-in: hardware or rental, power, space. Default is a public on-demand list price.</span></div>
+      <details id="adv">
+        <summary>Advanced (optional)</summary>
+        <div class="fields">
+          <div class="field" id="f-hbm"><label for="i-hbm">HBM per GPU (GB) <span id="t-hbm"></span></label><input id="i-hbm" type="number" min="1" step="1"><span class="hint">Set by GPU type. Case section A5 uses ~0.3 TB (300 GB) per XPU.</span></div>
+          <div class="field" id="f-t"><label for="i-t">Tokens/sec per GPU today <span id="t-t"></span></label><input id="i-t" type="number" min="1" step="50"><span class="hint">Total output across all users on one GPU. Default is our planning assumption; replace it with yours.</span></div>
+          <div class="field" id="f-u"><label for="i-u">Average utilization (%) <span id="t-u"></span></label><input id="i-u" type="number" min="1" max="100" step="5"></div>
+          <div class="field" data-src="you"><label for="i-p">Price you charge per 1M tokens ($) <span class="tag you">You</span></label><input id="i-p" type="number" min="0" step="0.05" placeholder="optional"><span class="hint">Needed for the excess-demand break-even and margin. Leave blank if you'd rather not share it.</span></div>
+          <div class="field" data-src="case"><label for="i-trays">X-Mem trays per 8-GPU node <span class="tag case">Case config</span></label><input id="i-trays" type="number" min="0" max="4" step="1"><span class="hint">One tray = 16 TB in the current public reference configuration.</span></div>
+        </div>
+      </details>
+    </div>
+    <div class="card">
+      <h2>How you'd use the extra capacity</h2>
+      <p class="muted">X-Mem lets each GPU serve more. That is only worth money if the extra capacity gets used, so pick the case closest to yours. Both break-even prices are shown on the next screen either way.</p>
+      <div class="seg" role="group" aria-label="Demand">
+        <button id="m-unmet" aria-pressed="true">Excess demand: I'd sell more</button>
+        <button id="m-flat" aria-pressed="false">Steady demand: I'd use fewer GPUs</button>
+      </div>
+      <div class="callout good" id="mode-explain"></div>
+      <div class="mem" id="mem"></div>
+      <button class="btn" data-go="results" style="align-self:flex-start">See my results</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 2 -->
+  <section class="view" id="v-results" hidden>
+    <div class="card span2">
+      <div class="hero" id="hero"></div>
+      <div class="callout info" id="interpret"></div>
+    </div>
+    <div class="card">
+      <h2>Capacity gain</h2>
+      <p class="muted" id="g-intro"></p>
+      <div class="band" id="band"></div>
+      <div class="slider"><div class="row"><label for="r-g">Set your own gain</label><b id="r-g-v"></b></div><input type="range" id="r-g" min="0" max="60" step="1"></div>
+      <div class="callout warn" id="g-src"></div>
+      <h2 style="margin-top:4px">Before and after</h2>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="card">
+      <h2>Adjust</h2>
+      <div class="slider"><div class="row"><label for="r-u">Utilization</label><b id="r-u-v"></b></div><input type="range" id="r-u" min="20" max="100" step="5"></div>
+      <div class="slider"><div class="row"><label for="r-x">Test an X-Mem price per GPU-hour</label><b id="r-x-v"></b></div><input type="range" id="r-x" min="0" max="3" step="0.05"><span class="muted">Netpreme lists no XM-Serve or VM price (netpreme.com and docs.netpreme.com, checked Nov 16, 2026; the VM page says pricing varies by configuration). Slide to test a price against your break-even.</span></div>
+      <div id="money"></div>
+    </div>
+    <div class="card span2">
+      <h2>Fleet totals</h2>
+      <p class="muted">The outputs case section A5 asks for, for your whole fleet, before and after. Yearly figures assume GPUs are paid for every hour; X-Mem fee included only if you set a test price.</p>
+      <div class="tbl-wrap"><table id="totals"></table></div>
+    </div>
+    <div class="card span2">
+      <h2>Sensitivity</h2>
+      <p class="muted">The same fleet under each gain. Yearly value is before any X-Mem fee: GPU cost avoided under steady demand, extra revenue under excess demand.</p>
+      <div class="tbl-wrap"><table id="sens"></table></div>
+    </div>
+    <div class="card span2">
+      <h2>What these numbers mean</h2>
+      <div class="defs">
+        <div><b>System capacity</b><span>How much traffic one GPU can serve at once while meeting its latency target.</span><span class="use">Benchmark: +30% on the same GPU. This is the gain we model.</span></div>
+        <div><b>Throughput</b><span>Total tokens per second one GPU produces across all users.</span><span class="use">We assume capacity gain becomes the same % more tokens served at the same utilization. A pilot checks this.</span></div>
+        <div><b>Concurrent users</b><span>How many sessions one GPU holds at once. More fast memory keeps more sessions' context loaded.</span><span class="use">Not modeled separately; measured in the pilot.</span></div>
+        <div><b>Latency</b><span>Time to first token and tokens per second per user, which is what each end user feels.</span><span class="use">Benchmark: +33–50% tokens/sec per user; up to 6.7× faster first token vs DRAM offload. Shown as a benefit, not counted in the dollars.</span></div>
+      </div>
+    </div>
+    <div class="card span2">
+      <h2>Netpreme's figures and how this tool uses them</h2>
+      <p class="muted">Netpreme publishes both measured results from one setup and best-case headlines. The dollar math uses only the measured capacity figure.</p>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Figure</th><th>What it measures</th><th>Used here?</th></tr></thead>
+        <tbody>
+          <tr><td>+30% system capacity, same GPU <span class="tag case">Fig. A4</span></td><td>Traffic one GPU can serve, agentic workload</td><td><b>Yes</b>: base gain for coding agents</td></tr>
+          <tr><td>+33–50% tokens/sec per user <span class="tag case">Fig. A4</span></td><td>Speed each user feels</td><td>Shown as a benefit; counting it in dollars would double count the capacity gain</td></tr>
+          <tr><td>Up to 6.7× faster first token <span class="tag case">Fig. A4</span></td><td>Latency vs DRAM offload, long shared prefixes</td><td>Shown as a benefit; the baseline is DRAM offload, not your current setup</td></tr>
+          <tr><td>~16 TB at ~3.6 TB/s per tray <span class="tag case">§13</span></td><td>X-Mem capacity and bandwidth</td><td><b>Yes</b>: memory outputs; trays are editable because configurations vary</td></tr>
+          <tr><td>~0.3 TB HBM per GPU <span class="tag case">§13, A5</span></td><td>Illustrative accelerator memory</td><td>Only in the Case A5 profile; otherwise we use your real GPU spec</td></tr>
+          <tr><td>Up to 4× concurrency <span class="tag ass">Headline</span></td><td>Best case on other workloads</td><td>No: basis not confirmed</td></tr>
+          <tr><td>Up to 10× cheaper tokens <span class="tag ass">Headline</span></td><td>Best case for long-horizon agents</td><td>No: basis not confirmed</td></tr>
+          <tr><td>~1.87× tokens/sec per dollar <span class="tag ass">Modeled</span></td><td>Netpreme's modeled scenario</td><td>No: we compute our own (1.30× at +30%, before any fee) from the measured gain</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="card span2">
+      <h2>What this is based on</h2>
+      <div class="tbl-wrap"><table id="formulas"></table></div>
+      <div class="callout warn"><b>When this estimate may not apply.</b> The +30% was measured by Netpreme on one H100-class GPU running Qwen3-30B-A3B (FP8) on an agentic serving benchmark (AIPerf, SGLang HiCache) with a 64 GB X-Mem offload tier. Short-prompt traffic, models that already fit in HBM, strict latency targets and non-NVIDIA accelerators may see less. The gain is not scaled with tray size: a 16 TB tray gives far more memory per GPU than the 64 GB tested. A pilot on your own traffic replaces these assumptions with measurements.</div>
+      <div class="row-btns"><button class="btn" data-go="pilot">Propose a pilot with this setup</button><button class="btn ghost" data-go="setup">Change my fleet</button></div>
+    </div>
+  </section>
+
+  <!-- SCREEN 3 -->
+  <section class="view" id="v-pilot" hidden>
+    <div class="card">
+      <h2>Proposed XM-Serve pilot</h2>
+      <p class="muted">A technical evaluation on Netpreme's early-access Memory-Augmented VM, where a customer picks a number of GPUs and an amount of X-Mem memory and requests pilot time. Your setup from step 1 is attached.</p>
+      <div class="vm" id="vm"></div>
+      <h3>How the evaluation works</h3>
+      <ol class="clean">
+        <li><b>Baseline run.</b> Your traffic, or a replay of it, on the GPUs without X-Mem, on vLLM or SGLang.</li>
+        <li><b>X-Mem run.</b> The same traffic on the same GPUs with the X-Mem tier added.</li>
+        <li><b>Measure at your latency target:</b> tokens/sec per GPU, concurrent sessions, time to first token (p50 and p95) and cost per 1M tokens.</li>
+        <li><b>Compare with this estimate.</b> Measured gain vs the <span id="est-g"></span> used here. Within ±20% means the calculator can be trusted for your next decision; outside it, we recalibrate the defaults.</li>
+      </ol>
+      <h3>Summary to share with your team</h3>
+      <pre class="summary" id="summary"></pre>
+      <div class="row-btns"><button class="btn ghost" id="copy">Copy summary</button><span class="muted" id="copy-msg" aria-live="polite"></span></div>
+    </div>
+    <div class="card">
+      <div class="row-btns" style="justify-content:space-between"><h2>Request pilot time</h2><span class="demo">Demonstration flow</span></div>
+      <form id="pilot-form" novalidate>
+        <label for="f-name">Your name<input id="f-name" autocomplete="name"></label>
+        <label for="f-co">Company<input id="f-co" autocomplete="organization"></label>
+        <label for="f-email">Work email<input id="f-email" type="email" autocomplete="email"></label>
+        <label for="f-lat">Latency target, if you have one (optional)<input id="f-lat" placeholder="e.g. first token under 1 s at p95"></label>
+        <label for="f-note">Anything we should know about your traffic? (optional)<textarea id="f-note"></textarea></label>
+        <label class="check" for="f-share"><input type="checkbox" id="f-share" checked><span>Share an anonymized workload profile from the pilot to inform Netpreme's XM-100 memory chip (see below). You can turn this off and still get a pilot.</span></label>
+        <p class="muted">Contact details are used only to schedule the evaluation. Your setup and estimate travel with the request so you don't re-enter them.</p>
+        <button class="btn" type="submit" style="align-self:flex-start">Request pilot</button>
+        <div id="form-msg" aria-live="polite"></div>
+      </form>
+    </div>
+    <div class="card span2">
+      <h2>What your pilot teaches the next chip</h2>
+      <p class="muted">With your permission, each pilot records how your workload uses memory. XM-Serve proves value on GPUs today; the same measurements tell Netpreme what its XM-100 chip, and the accelerator vendors that adopt it, need to build.</p>
+      <div class="insight">
+        <div><b>Memory bottlenecks</b><span>KV-cache size against HBM, how often context spills to the X-Mem tier, and how much bandwidth that takes.</span><span class="to">Sets how much memory and bandwidth per accelerator XM-100 should target.</span></div>
+        <div><b>Workload patterns</b><span>Context lengths, how much prompt prefix repeats across agent steps, and how many models stay loaded.</span><span class="to">Shows which accelerator segments feel the memory wall first.</span></div>
+        <div><b>Performance requirements</b><span>The latency targets customers actually hold to, and the gain they need before they pay.</span><span class="to">Gives chip partners real buyer requirements instead of benchmarks alone.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>Sources: Netpreme case packet §13 and Fig. A4 (SGLang HiCache benchmark, Netpreme blog, July 2026: one H100-class GPU, Qwen3-30B-A3B FP8, 64 GB offload tier, agentic AIPerf workload); §11 Memory-Augmented VM; Fig. A5 worked example and §13 tray configuration (~16 TB at ~3.6 TB/s); NVIDIA H100/H200/B200 spec sheets for HBM. GPU-hour prices, throughput defaults, utilization, and the low/high gains are team assumptions.</div>
+  </footer>
+</div>
+
+<script>
+const GPUS={
+  H100:{hbm:80, cost:2.49, tpsMul:1.0},
+  H200:{hbm:141,cost:3.49, tpsMul:1.4},
+  B200:{hbm:192,cost:5.99, tpsMul:2.4},
+  XPU:{hbm:300, cost:2.49, tpsMul:1.0, label:"XPU"}   // case A5 example; cost and throughput are our H100-level assumptions
+};
+// Capacity gain g on the same GPU: low / base / high. src = source of the base value.
+const WORK={
+  agent:{label:"Coding agents", g:[0.15,0.30,0.45], tps:2400, src:"case",
+    note:"Closest to Netpreme's benchmark (agentic serving): +30% system capacity."},
+  chat:{label:"Long-context chat", g:[0.10,0.20,0.30], tps:1800, src:"ass",
+    note:"Not benchmarked. Our conservative estimate below the agentic result."},
+  multi:{label:"Many models kept warm", g:[0.05,0.15,0.25], tps:2000, src:"ass",
+    note:"Not benchmarked. Our conservative estimate below the agentic result."}
+};
+const PRESETS=[
+  {id:"p1",name:"Coding-agent API · 64× H100",gpu:"H100",n:64,work:"agent",p:1.20,mode:"unmet"},
+  {id:"p2",name:"Long-context chat · 256× H200",gpu:"H200",n:256,work:"chat",p:1.50,mode:"flat"},
+  {id:"p3",name:"Multi-model host · 32× B200",gpu:"B200",n:32,work:"multi",p:null,mode:"flat"},
+  {id:"a5",name:"Case A5 example · 8 XPUs, 0.3 TB",gpu:"XPU",n:8,work:"agent",p:null,mode:"flat"}
+];
+const S={gpu:"H100",hbm:80,n:64,work:"agent",c:2.49,t:2400,u:60,p:1.20,trays:1,mode:"unmet",scen:1,gCustom:null,x:0,preset:"p1",view:"setup"};
+const H=8760;
+
+// ---------- pure model ----------
+function gainOf(s){return s.gCustom!=null? s.gCustom : WORK[s.work].g[s.scen];}
+function model(s,gOverride){
+  const g=gOverride!=null? gOverride : gainOf(s);
+  const U=s.u/100;
+  const tokHr0=s.t*3600*U, tokHr1=tokHr0*(1+g), extraTokHr=tokHr0*g;
+  const cost0=s.c/tokHr0*1e6;
+  const cost1=(s.c+s.x)/tokHr1*1e6;
+  const zFlat=s.c*g;                                       // (C+X)/(1+g)=C  =>  X=C·g
+  const zUnmet=s.p!=null? s.p*extraTokHr/1e6 : null;      // revenue from extra tokens per GPU-hour
+  const zActive=(s.mode==="unmet" && zUnmet!=null)? zUnmet : zFlat;
+  const o={g,U,tokHr0,tokHr1,extraTokHr,cost0,cost1,zFlat,zUnmet,zActive,t1:s.t*(1+g),
+    memNode0:8*s.hbm/1000, memNode1:8*s.hbm/1000+16*s.trays};
+  o.nodes=Math.ceil(s.n/8);
+  o.memFleet0=s.n*s.hbm/1000; o.memFleet1=o.memFleet0+16*s.trays*o.nodes;
+  o.tpsd0=s.t*U/s.c; o.tpsd1=s.t*(1+g)*U/(s.c+s.x);       // tokens/sec per $ of hourly cost
+  o.trayHr=(v)=>s.trays>0? v*8/s.trays : null;            // per-GPU-hour price -> per-tray-hour (1 tray serves 8 GPUs)
+  o.tco0=s.n*s.c*H;
+  o.tco1=(s.mode==="flat"? Math.ceil(s.n/(1+g)) : s.n)*(s.c+s.x)*H;
+  o.tok0=s.n*tokHr0*H; o.tok1=s.mode==="flat"? o.tok0 : s.n*tokHr1*H;
+  o.gpus1=Math.ceil(s.n/(1+g));
+  o.yrFlat=(s.n-o.gpus1)*s.c*H;                            // GPU cost avoided (whole GPUs), before fee
+  o.yrUnmet=zUnmet!=null? zUnmet*s.n*H : null;              // extra revenue, before fee
+  if(s.p!=null){
+    o.mgn0=s.p*tokHr0/1e6-s.c; o.mgn1=s.p*tokHr1/1e6-s.c-s.x;
+  }
+  return o;
+}
+
+// ---------- formatting ----------
+const $=id=>document.getElementById(id);
+const usd=(v,d=2)=>(v<0?"−$":"$")+Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const big=v=>{const a=Math.abs(v),sg=v<0?"−$":"$";return a>=1e6?sg+(a/1e6).toFixed(2)+"M":a>=1e3?sg+Math.round(a/1e3)+"K":sg+a.toFixed(0)};
+const num=v=>Math.round(v).toLocaleString("en-US");
+const pct=v=>(v>=0?"+":"")+Math.round(v*100)+"%";
+const pctAbs=v=>Math.round(v*100)+"%";
+const tag=(k,t)=>`<span class="tag ${k}">${t}</span>`;
+const TAGS={you:tag("you","You"),case:tag("case","Case benchmark"),pub:tag("pub","Public spec"),ass:tag("ass","Assumption"),calc:tag("calc","Calculated")};
+function srcOf(key){
+  if(key==="c") return S.c===GPUS[S.gpu].cost?"ass":"you";
+  if(key==="t") return S.t===Math.round(WORK[S.work].tps*GPUS[S.gpu].tpsMul)?"ass":"you";
+  if(key==="u") return S.u===60?"ass":"you";
+  if(key==="hbm") return S.hbm===GPUS[S.gpu].hbm?(S.gpu==="XPU"?"case":"pub"):"you";
+  if(key==="g") return S.gCustom!=null?"you":(WORK[S.work].src==="case"&&S.scen===1?"case":"ass");
+}
+function gLabel(){return S.gCustom!=null?"your own":["low","base","high"][S.scen];}
+
+// ---------- render ----------
+function render(){
+  const m=model(S), W=WORK[S.work];
+  // inputs
+  $("i-gpu").value=S.gpu; $("i-n").value=S.n; $("i-work").value=S.work;
+  if(document.activeElement!==$("i-c")) $("i-c").value=S.c;
+  if(document.activeElement!==$("i-t")) $("i-t").value=S.t;
+  if(document.activeElement!==$("i-u")) $("i-u").value=S.u;
+  if(document.activeElement!==$("i-p")) $("i-p").value=S.p??"";
+  $("i-trays").value=S.trays;
+  if(document.activeElement!==$("i-hbm")) $("i-hbm").value=S.hbm;
+  [["c","f-c","t-c"],["t","f-t","t-t"],["u","f-u","t-u"],["hbm","f-hbm","t-hbm"]].forEach(([k,f,t])=>{const s=srcOf(k); $(f).dataset.src=s; $(t).innerHTML=TAGS[s];});
+  $("h-work").textContent=W.note;
+  document.querySelectorAll("#presets .chip").forEach(b=>b.setAttribute("aria-pressed",b.dataset.id===S.preset));
+  $("m-unmet").setAttribute("aria-pressed",S.mode==="unmet"); $("m-flat").setAttribute("aria-pressed",S.mode==="flat");
+  $("mode-explain").innerHTML=S.mode==="unmet"
+    ? `<b>Excess demand.</b> You have customers waiting, so every extra token each GPU can serve gets sold at your current price. X-Mem is worth the extra revenue per GPU-hour.${S.p==null?" Add the price you charge per 1M tokens under Advanced to see it.":""}`
+    : `<b>Steady demand.</b> Traffic stays the same, so you serve it on fewer GPUs. X-Mem is worth the GPU cost you stop paying.`;
+  // memory
+  const tb=v=>v.toFixed(v<10?2:1)+" TB";
+  const hbm=m.memNode0, tot=m.memNode1, xm=tot-hbm;
+  $("mem").innerHTML=`<h3>Fast memory per 8-GPU node</h3>
+    <div class="stack" role="img" aria-label="HBM ${tb(hbm)} plus X-Mem ${tb(xm)}"><div style="width:${hbm/tot*100}%;background:var(--base)"></div><div style="width:${xm/tot*100}%;background:var(--xmem)"></div></div>
+    <div class="legend"><span><i style="background:var(--base)"></i>GPU HBM ${tb(hbm)} ${TAGS[srcOf("hbm")]}</span><span><i style="background:var(--xmem)"></i>X-Mem ${tb(xm)} ${tag("case","Case config")}</span>${S.trays?`<span>${(tot/hbm).toFixed(1)}× the memory, same GPUs</span>`:""}</div>
+    <p class="muted">Whole fleet: ${tb(m.memFleet0)} → ${tb(m.memFleet1)} across ${m.nodes} node${m.nodes>1?"s":""}. X-Mem runs at ~3.6 TB/s per tray: slower than HBM (10–20 TB/s) but far faster than host DRAM (~128 GB/s), so it sits between them as a new tier. More fast memory keeps more sessions and longer contexts loaded. The capacity gain on the next screen comes from Netpreme's benchmark, which used a 64 GB X-Mem tier per GPU, so it is not scaled up by this larger figure.</p>`;
+  // strip
+  $("s-cost").innerHTML=`${usd(m.cost0,3)}<span class="arrow">→</span><span class="after">${usd(m.cost1,3)}</span>`;
+  $("s-cap").innerHTML=`${num(S.t)}<span class="arrow">→</span><span class="after">${num(m.t1)}</span>`;
+  const activeUnmet=S.mode==="unmet"&&m.zUnmet!=null;
+  $("s-zk").textContent=`Break-even, ${activeUnmet?"excess":"steady"} demand`;
+  $("s-z").textContent=usd(m.zActive)+" / GPU-hr";
+  $("s-next").textContent=S.view==="setup"?"See results":S.view==="results"?"Propose a pilot":"Back to results";
+  // hero
+  const gTxt=pctAbs(m.g);
+  const flatCard=`<div class="metric ${!activeUnmet?"feature":"dim"}">
+      <span class="lbl">Break-even, steady demand ${!activeUnmet?'<span class="pill">Your case</span>':""}</span>
+      <span class="big">${usd(m.zFlat)}<small style="font-size:14px"> / GPU-hr</small></span>
+      <span class="note">The GPU cost you avoid by serving the same traffic on fewer GPUs.</span>
+      <span class="math">C × g = ${usd(S.c)} × ${gTxt} = ${usd(m.zFlat)}</span>${S.trays?`<span class="note">= ${usd(m.trayHr(m.zFlat))} per tray-hour (${S.trays} tray per 8 GPUs)</span>`:""}</div>`;
+  const unmetCard=m.zUnmet!=null
+    ? `<div class="metric ${activeUnmet?"feature":"dim"}">
+      <span class="lbl">Break-even, excess demand ${activeUnmet?'<span class="pill">Your case</span>':""}</span>
+      <span class="big">${usd(m.zUnmet)}<small style="font-size:14px"> / GPU-hr</small></span>
+      <span class="note">Revenue from ${num(m.extraTokHr)} extra tokens per GPU-hour, assuming you can sell all of them at your price.</span>
+      <span class="math">P × T × 3,600 × U × g ÷ 1M = ${usd(S.p)} × ${num(S.t)} × 3,600 × ${S.u}% × ${gTxt} ÷ 1M = ${usd(m.zUnmet)}</span>${S.trays?`<span class="note">= ${usd(m.trayHr(m.zUnmet))} per tray-hour (${S.trays} tray per 8 GPUs)</span>`:""}</div>`
+    : `<div class="metric dim"><span class="lbl">Break-even, excess demand</span><span class="big">—</span><span class="note">Needs the price you charge per 1M tokens (step 1, Advanced).</span><span class="math">P × T × 3,600 × U × g ÷ 1M</span></div>`;
+  const costCard=`<div class="metric"><span class="lbl">Cost per 1M tokens${S.x?"":" (before X-Mem fee)"}</span><span class="big">${usd(m.cost0,3)} → ${usd(m.cost1,3)}</span><span class="note">${pct(m.cost1/m.cost0-1)} on the same GPUs</span><span class="math">(C + X) ÷ (T × (1+g) × 3,600 × U) × 1M</span></div>`;
+  $("hero").innerHTML=flatCard+unmetCard+costCard;
+  $("interpret").innerHTML=`<b>How to read your break-even.</b> It is the most you could pay for X-Mem per GPU-hour and be no worse off, at the ${gLabel()} gain of ${gTxt}. Any price below it is profit you keep. Because the gain is an estimate until a pilot measures it, look for a price well below the break-even, or check the Low row in the sensitivity table. ${activeUnmet?"The excess-demand figure only holds if the extra tokens actually sell; if they don't, the steady-demand figure applies.":"If you later have more demand than GPUs, the excess-demand figure applies instead."}`;
+  // gain band
+  $("g-intro").innerHTML=`How much more traffic each GPU can serve with X-Mem. Pick a scenario or set your own. Source of the value in use: ${TAGS[srcOf("g")]}`;
+  $("band").innerHTML=["Low","Base","High"].map((s,i)=>{
+    const src=(i===1&&W.src==="case")?"case":"ass";
+    return `<button data-scen="${i}" aria-pressed="${S.gCustom==null&&S.scen===i}"><span class="s">${s}</span><span class="g">${pct(W.g[i])}</span>${TAGS[src]}</button>`}).join("")
+    + `<button data-scen="custom" aria-pressed="${S.gCustom!=null}"><span class="s">Yours</span><span class="g">${S.gCustom!=null?pct(S.gCustom):"—"}</span>${TAGS.you}</button>`;
+  $("r-g").value=Math.round(m.g*100); $("r-g-v").textContent=pct(m.g);
+  $("g-src").innerHTML=W.src==="case"
+    ? `<b>+30% is a benchmark, not a promise.</b> Netpreme measured +30% system capacity in one agentic serving test (case §13, Fig. A4). Low (+15%) and High (+45%) are our assumptions around it. The headline “up to 10× cheaper tokens” and “up to 4× concurrency” are best cases from other workloads and are never used as defaults.`
+    : `<b>Not benchmarked yet.</b> ${W.label} has no published X-Mem result. All three values are our conservative assumptions, set below the +30% agentic benchmark. Treat them as directional until a pilot measures your traffic.`;
+  // bars
+  const row=(lbl,v,max,cls,txt)=>`<div class="bar-row"><span>${lbl}</span><div class="track"><div class="fill ${cls}" style="width:${Math.max(2,v/max*100)}%"></div></div><span class="num">${txt}</span></div>`;
+  const cMax=Math.max(m.cost0,m.cost1), tMax=Math.max(S.t,m.t1);
+  $("bars").innerHTML=`<div><h3 style="margin-bottom:8px">Tokens/sec per GPU</h3>${row("Today",S.t,tMax,"b",num(S.t))}${row("With X-Mem",m.t1,tMax,"x",num(m.t1))}</div>
+    <div><h3 style="margin-bottom:8px">Cost per 1M tokens</h3>${row("Today",m.cost0,cMax,"b",usd(m.cost0,3))}${row("With X-Mem",m.cost1,cMax,"x",usd(m.cost1,3))}</div>`;
+  // sliders + money
+  $("r-u").value=S.u; $("r-u-v").textContent=S.u+"%";
+  $("r-x").value=S.x; $("r-x-v").textContent=S.x?usd(S.x)+(S.trays?` · ${usd(m.trayHr(S.x))}/tray-hr`:""):"not set";
+  let money="";
+  if(S.x>0){
+    const keep=m.zActive-S.x;
+    money=keep>=0
+      ? `<div class="callout good"><b>At ${usd(S.x)} you come out ahead by ${usd(keep)} per GPU-hour</b> (${big(keep*S.n*H)} a year across ${num(S.n)} GPUs). You keep ${Math.round(keep/m.zActive*100)}% of the value X-Mem creates; the fee is ${Math.round(S.x/m.zActive*100)}%.</div>`
+      : `<div class="callout warn"><b>At ${usd(S.x)} X-Mem costs ${usd(-keep)} per GPU-hour more than it is worth</b> at a ${gTxt} gain. Try a lower price, or see whether the High row in the sensitivity table changes the answer.</div>`;
+  } else money=`<div class="locked">Set a test price to see what you keep after the fee.</div>`;
+  if(S.mode==="flat") money+=`<div class="metric" style="margin-top:12px"><span class="lbl">GPUs needed for today's traffic</span><span class="big">${num(S.n)} → ${num(m.gpus1)}</span><span class="note">${big(S.x? (S.n*S.c - m.gpus1*(S.c+S.x))*H : m.yrFlat)} per year ${S.x?"after the fee":"before any fee"}</span></div>`;
+  else if(S.p!=null) money+=`<div class="metric" style="margin-top:12px"><span class="lbl">Gross margin per GPU-hour</span><span class="big">${usd(m.mgn0)} → ${usd(m.mgn1)}</span><span class="note">${big((m.mgn1-m.mgn0)*S.n*H)} more per year across ${num(S.n)} GPUs ${S.x?"after the fee":"before any fee"}, if the extra tokens sell</span></div>`;
+  $("money").innerHTML=money;
+  // fleet totals
+  const flat=S.mode==="flat";
+  $("totals").innerHTML=`<thead><tr><th>Output</th><th class="n">Today</th><th class="n">With X-Mem</th><th>How</th></tr></thead><tbody>
+    <tr><td>Total fast memory</td><td class="n">${tb(m.memFleet0)}</td><td class="n">${tb(m.memFleet1)}</td><td>N × HBM, plus 16 TB × trays per 8-GPU node (${(m.memFleet1/m.memFleet0).toFixed(1)}×)</td></tr>
+    <tr><td>Tokens/sec per $ of hourly cost</td><td class="n">${num(m.tpsd0)}</td><td class="n">${num(m.tpsd1)}</td><td>T × U ÷ C, then T × (1+g) × U ÷ (C + X) (${(m.tpsd1/m.tpsd0).toFixed(2)}×)</td></tr>
+    <tr><td>Cost per 1M tokens</td><td class="n">${usd(m.cost0,3)}</td><td class="n">${usd(m.cost1,3)}</td><td>${S.x?"Includes X-Mem fee":"Before any X-Mem fee"}</td></tr>
+    <tr><td>GPUs in service</td><td class="n">${num(S.n)}</td><td class="n">${num(flat?m.gpus1:S.n)}</td><td>${flat?"Steady demand: same traffic on fewer GPUs":"Excess demand: same GPUs, more traffic"}</td></tr>
+    <tr><td>Yearly TCO (GPUs + X-Mem)</td><td class="n">${big(m.tco0)}</td><td class="n">${big(m.tco1)}</td><td>GPUs × (C + X) × 8,760 h${S.x?"":"; X-Mem fee not set"}</td></tr>
+    <tr><td>Tokens served per year</td><td class="n">${(m.tok0/1e12).toFixed(2)}T</td><td class="n">${(m.tok1/1e12).toFixed(2)}T</td><td>GPUs × T × 3,600 × U × 8,760 h</td></tr></tbody>`;
+  // sensitivity
+  const scen=[["Low",W.g[0],W.src==="case"?"ass":"ass"],["Base",W.g[1],W.src==="case"?"case":"ass"],["High",W.g[2],"ass"]];
+  if(S.gCustom!=null) scen.push(["Yours",S.gCustom,"you"]);
+  $("sens").innerHTML=`<thead><tr><th>Scenario</th><th class="n">Gain</th><th class="n">Tokens/s per GPU</th><th class="n">Cost / 1M</th><th class="n">Break-even, steady</th><th class="n">Break-even, excess</th><th class="n">Yearly value, ${activeUnmet?"excess":"steady"}</th><th>Source</th></tr></thead><tbody>`+
+    scen.map(([n,g,src])=>{const r=model(S,g); const cur=Math.abs(g-m.g)<1e-9;
+      return `<tr class="${cur?"cur":""}"><td>${n}</td><td class="n">${pct(g)}</td><td class="n">${num(r.t1)}</td><td class="n">${usd(r.cost1,3)}</td><td class="n">${usd(r.zFlat)}</td><td class="n">${r.zUnmet!=null?usd(r.zUnmet):"needs P"}</td><td class="n">${activeUnmet?big(r.yrUnmet):big(r.yrFlat)}</td><td>${TAGS[src]}</td></tr>`}).join("")+`</tbody>`;
+  // formulas
+  const rows=[
+    ["N","GPUs",num(S.n),TAGS.you],
+    ["HBM","Memory per GPU",S.hbm+" GB",TAGS[srcOf("hbm")]],
+    ["Trays","X-Mem trays per 8-GPU node, 16 TB each",String(S.trays),tag("case","Case config")],
+    ["C","Cost per GPU-hour",usd(S.c),TAGS[srcOf("c")]],
+    ["T","Tokens/sec per GPU today",num(S.t),TAGS[srcOf("t")]],
+    ["U","Utilization",S.u+"%",TAGS[srcOf("u")]],
+    ["g","Capacity gain on the same GPU",pct(m.g)+" ("+gLabel()+")",TAGS[srcOf("g")]],
+    ["P","Price per 1M tokens",S.p!=null?usd(S.p):"not shared",TAGS.you],
+    ["X","X-Mem price per GPU-hour",S.x?usd(S.x):"not set",TAGS.you],
+    ["","Cost per 1M tokens today",`<code>C ÷ (T·3600·U) × 10⁶</code> = ${usd(m.cost0,3)}`,TAGS.calc],
+    ["","Cost per 1M tokens with X-Mem",`<code>(C+X) ÷ (T·(1+g)·3600·U) × 10⁶</code> = ${usd(m.cost1,3)}`,TAGS.calc],
+    ["","Break-even, steady demand",`<code>C·g</code> = ${usd(m.zFlat)}`,TAGS.calc],
+    ["","Break-even, excess demand",m.zUnmet!=null?`<code>P·T·3600·U·g ÷ 10⁶</code> = ${usd(m.zUnmet)}`:"needs P",TAGS.calc],
+    ["","GPUs for today's traffic",`<code>⌈N ÷ (1+g)⌉</code> = ${num(m.gpus1)}`,TAGS.calc],
+    ["","Fast memory per node",`<code>8·HBM + 16 TB·trays</code> = ${m.memNode1.toFixed(2)} TB`,TAGS.calc],
+    ["","Tokens/sec per $",`<code>T·(1+g)·U ÷ (C+X)</code> = ${num(m.tpsd1)}`,TAGS.calc],
+    ["","Yearly TCO",`<code>GPUs·(C+X)·8760</code> = ${big(m.tco1)}`,TAGS.calc],
+    ["","Break-even per tray-hour",S.trays?`<code>Z·8 ÷ trays</code> = ${usd(m.trayHr(m.zActive))}`:"no trays",TAGS.calc]
+  ];
+  $("formulas").innerHTML=`<thead><tr><th>Sym</th><th>What</th><th>Value / formula</th><th>Source</th></tr></thead><tbody>${rows.map(r=>`<tr><td><code>${r[0]}</code></td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join("")}</tbody>`;
+  // pilot
+  const nodes=Math.max(1,Math.ceil(S.n/8));
+  $("vm").innerHTML=`<div><div class="lbl">GPUs</div><div class="val">8× ${S.gpu}</div></div>
+    <div><div class="lbl">X-Mem memory</div><div class="val">${16*Math.max(1,S.trays)} TB</div></div>
+    <div><div class="lbl">Workload</div><div class="val" style="font-size:14px">${W.label}</div></div>
+    <div><div class="lbl">Engine</div><div class="val" style="font-size:14px">vLLM or SGLang</div></div>`;
+  $("est-g").textContent=pct(m.g)+" gain";
+  $("summary").textContent=summaryText(m,W,nodes);
+  // views
+  ["setup","results","pilot"].forEach(v=>{$("v-"+v).hidden=S.view!==v});
+  document.querySelectorAll(".steps button").forEach(b=>b.setAttribute("aria-current",b.dataset.go===S.view?"step":"false"));
+}
+function summaryText(m,W,nodes){
+  return `XM-Serve estimate (concept prototype, not a quote)
+Fleet: ${num(S.n)}× ${S.gpu} (${nodes} nodes of 8) · ${W.label}
+Demand case: ${S.mode==="unmet"?"excess demand (extra tokens assumed sold)":"steady demand (fewer GPUs)"}
+Inputs: $${S.c}/GPU-hr [${srcOf("c")==="you"?"customer":"assumption"}] · ${num(S.t)} tok/s/GPU [${srcOf("t")==="you"?"customer":"assumption"}] · ${S.u}% utilization${S.p!=null?` · $${S.p}/1M tokens`:""}
+Capacity gain used: ${pct(m.g)} (${gLabel()}; ${srcOf("g")==="case"?"Netpreme benchmark, case Fig. A4":srcOf("g")==="you"?"customer assumption":"team assumption"})
+Cost per 1M tokens: ${usd(m.cost0,3)} → ${usd(m.cost1,3)}${S.x?"":" (before X-Mem fee)"}
+Tokens/sec per GPU: ${num(S.t)} → ${num(m.t1)}
+Fast memory (fleet): ${(m.memFleet0).toFixed(2)} TB → ${(m.memFleet1).toFixed(1)} TB
+Break-even X-Mem price: steady ${usd(m.zFlat)}/GPU-hr${m.zUnmet!=null?` · excess ${usd(m.zUnmet)}/GPU-hr`:""}
+Proposed pilot: 8× ${S.gpu} + ${16*Math.max(1,S.trays)} TB X-Mem, baseline vs X-Mem on the same traffic
+Success check: measured gain within ±20% of ${pct(m.g)}`;
+}
+
+function go(v){S.view=v; if(location.hash!=="#"+v) history.replaceState(null,"","#"+v); render(); window.scrollTo({top:0,behavior:"smooth"});}
+function applyPreset(p){Object.assign(S,{preset:p.id,gpu:p.gpu,hbm:GPUS[p.gpu].hbm,n:p.n,work:p.work,p:p.p,mode:p.mode,c:GPUS[p.gpu].cost,t:Math.round(WORK[p.work].tps*GPUS[p.gpu].tpsMul),u:60,scen:1,gCustom:null,trays:1}); render();}
+
+// ---------- wiring ----------
+$("presets").innerHTML=PRESETS.map(p=>`<button class="chip" data-id="${p.id}">${p.name}</button>`).join("");
+$("presets").addEventListener("click",e=>{const b=e.target.closest(".chip"); if(b) applyPreset(PRESETS.find(p=>p.id===b.dataset.id));});
+document.addEventListener("click",e=>{const b=e.target.closest("[data-go]"); if(b){e.preventDefault(); go(b.dataset.go);}});
+$("s-next").addEventListener("click",()=>go(S.view==="setup"?"results":S.view==="results"?"pilot":"results"));
+const numIn=(id,key,{opt=false,min=0,max=Infinity}={})=>$(id).addEventListener("input",e=>{
+  const v=e.target.value;
+  if(opt&&v===""){S[key]=null;}
+  else{const f=parseFloat(v); if(!isFinite(f)||f<min) return; S[key]=Math.min(max,f);}
+  S.preset=null; render();});
+numIn("i-n","n",{min:1}); numIn("i-c","c",{min:0}); numIn("i-t","t",{min:1}); numIn("i-p","p",{opt:true,min:0}); numIn("i-trays","trays",{min:0,max:4}); numIn("i-u","u",{min:1,max:100}); numIn("i-hbm","hbm",{min:1});
+$("i-gpu").addEventListener("change",e=>{S.gpu=e.target.value; S.hbm=GPUS[S.gpu].hbm; S.c=GPUS[S.gpu].cost; S.t=Math.round(WORK[S.work].tps*GPUS[S.gpu].tpsMul); S.preset=null; render();});
+$("i-work").addEventListener("change",e=>{S.work=e.target.value; S.t=Math.round(WORK[S.work].tps*GPUS[S.gpu].tpsMul); S.gCustom=null; S.scen=1; S.preset=null; render();});
+$("m-unmet").addEventListener("click",()=>{S.mode="unmet"; render();});
+$("m-flat").addEventListener("click",()=>{S.mode="flat"; render();});
+$("band").addEventListener("click",e=>{const b=e.target.closest("[data-scen]"); if(!b) return;
+  if(b.dataset.scen==="custom"){ if(S.gCustom==null) S.gCustom=gainOf(S); }
+  else { S.scen=+b.dataset.scen; S.gCustom=null; }
+  render();});
+$("r-g").addEventListener("input",e=>{S.gCustom=(+e.target.value)/100; render();});
+$("r-u").addEventListener("input",e=>{S.u=+e.target.value; render();});
+$("r-x").addEventListener("input",e=>{S.x=+e.target.value; render();});
+$("copy").addEventListener("click",()=>{const t=$("summary").textContent; const done=m=>{$("copy-msg").textContent=m;};
+  try{navigator.clipboard.writeText(t).then(()=>done("Copied."),()=>{selectSummary();done("Selected. Press Cmd/Ctrl+C to copy.");});}
+  catch(_){selectSummary();done("Selected. Press Cmd/Ctrl+C to copy.");}});
+function selectSummary(){const r=document.createRange(); r.selectNodeContents($("summary")); const s=getSelection(); s.removeAllRanges(); s.addRange(r);}
+const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+$("pilot-form").addEventListener("submit",e=>{e.preventDefault();
+  const miss=[];
+  if(!$("f-name").value.trim()) miss.push("name");
+  if(!$("f-co").value.trim()) miss.push("company");
+  if(!$("f-email").value.trim()||!$("f-email").checkValidity()) miss.push("a valid work email");
+  if(miss.length){ $("form-msg").innerHTML=`<div class="callout warn">Add your ${miss.join(", ")} so the request can be scheduled.</div>`; return; }
+  const m=model(S), W=WORK[S.work];
+  const payload=`Requested by: ${$("f-name").value.trim()}, ${$("f-co").value.trim()} <${$("f-email").value.trim()}>
+Latency target: ${$("f-lat").value.trim()||"not given"}
+Workload profile shared for XM-100: ${$("f-share").checked?"yes (anonymized)":"no"}
+${$("f-note").value.trim()?"Notes: "+$("f-note").value.trim()+"\n":""}
+${summaryText(m,W,Math.max(1,Math.ceil(S.n/8)))}`;
+  $("form-msg").innerHTML=`<div class="callout good"><b>Demonstration: request assembled, nothing was sent.</b> In a live version this goes to Netpreme's solutions team with the attachment below.</div><pre class="summary" style="margin-top:8px">${esc(payload)}</pre>`;});
+function fromHash(){const h=location.hash.slice(1); S.view=["setup","results","pilot"].includes(h)?h:"setup"; render();}
+window.addEventListener("hashchange",fromHash);
+fromHash();
+</script>
+</body>
+</html>
